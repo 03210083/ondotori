@@ -132,6 +132,7 @@ class MainWindow(QMainWindow):
         row3 = QHBoxLayout()
         row3.addWidget(QLabel("親機S/N:"))
         self.base_serial_edit = QLineEdit()
+        self.base_serial_edit.setPlaceholderText("複数台はカンマ区切り (例: 58580041, 58580E2A)")
         row3.addWidget(self.base_serial_edit)
         row3.addWidget(QLabel("開始日:"))
         self.start_date_edit = QLineEdit()
