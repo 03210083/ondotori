@@ -12,10 +12,10 @@ DEVICES_ENDPOINT = "/v1/devices/current"
 DATA_ENDPOINT = "/v1/devices/data-rtr500"
 
 # レートリミットしきい値: 残数がこの値以下になったら待機
-RATE_LIMIT_THRESHOLD = 3
-RATE_LIMIT_WAIT = 15  # 秒
+RATE_LIMIT_THRESHOLD = 2
+RATE_LIMIT_WAIT = 10  # 秒
 
-# 子機間のウェイト（秒） — 20回/60秒制限のため最低3秒必要
+# 子機間のウェイト（秒）
 DEVICE_WAIT = 3
 
 
