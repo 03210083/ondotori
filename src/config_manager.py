@@ -7,10 +7,10 @@ import os
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG = {
-    "api_key": "73pfobnche8d1p6laqnemsbnpkght3bjv047oid6p2sg3",
-    "login_id": "tbzz9999",
-    "login_pass": "ppaasswwoorrdd",
-    "base_serials": ["58580001"],
+    "api_key": "",
+    "login_id": "",
+    "login_pass": "",
+    "base_serials": [],
     "start_date": "2026-02-10",
     "devices": [],
     "last_fetch": {},

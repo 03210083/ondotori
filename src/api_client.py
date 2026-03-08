@@ -12,7 +12,7 @@ DEVICES_ENDPOINT = "/v1/devices/current"
 DATA_ENDPOINT = "/v1/devices/data-rtr500"
 
 # レートリミットしきい値: 残数がこの値以下になったら待機
-RATE_LIMIT_THRESHOLD = 2
+RATE_LIMIT_THRESHOLD = 1
 RATE_LIMIT_WAIT = 10  # 秒
 
 # 子機間のウェイト（秒）
@@ -86,19 +86,32 @@ class OndotoriClient:
     def get_devices(self, base_serials: list[str]) -> list[dict]:
         """子機一覧を取得する。
 
+        base_serials で指定した親機に紐づく子機のみ返す。
+
         Returns:
             子機情報のリスト。各要素は config.json の devices 形式に変換済み。
         """
         body = self._auth_body()
-        body["base-serial"] = ",".join(base_serials)
         result = self._request(DEVICES_ENDPOINT, body)
+
+        base_set = set(base_serials) if base_serials else None
 
         devices = []
         for dev in result.get("devices", []):
+            # 親機シリアルは baseunit.serial にネストされている
+            baseunit = dev.get("baseunit", {})
+            dev_base_serial = baseunit.get("serial", "")
+
+            # base_serials が指定されている場合、該当する親機の子機のみ抽出
+            if base_set and dev_base_serial not in base_set:
+                continue
+
             channels = []
             for ch in dev.get("channel", []):
-                ch_num = ch.get("num", 1)
-                ch_name = ch.get("name", f"Ch.{ch_num}")
+                ch_num = int(ch.get("num", 1))
+                ch_name = ch.get("name", "").strip()
+                if not ch_name:
+                    ch_name = f"Ch.{ch_num}"
                 unit = ch.get("unit", "")
                 col_name = f"{dev.get('name', dev['serial'])} {ch_name}"
                 channels.append({
@@ -109,7 +122,7 @@ class OndotoriClient:
                 })
             devices.append({
                 "serial": dev["serial"],
-                "base_serial": dev.get("base_serial", ""),
+                "base_serial": dev_base_serial,
                 "model": dev.get("model", ""),
                 "name": dev.get("name", dev["serial"]),
                 "channels": channels,

@@ -1,0 +1,10 @@
+config.json
+gaps.json
+data/
+logs/
+__pycache__/
+*.pyc
+dist/
+build/
+*.egg-info/
+.venv/
