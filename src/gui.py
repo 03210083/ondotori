@@ -297,6 +297,9 @@ class MainWindow(QMainWindow):
                     "[%d/%d] %s (%s) 取得中...",
                     i + 1, len(devices), dev["name"], serial,
                 )
+                self.worker_signal.status_updated.emit(
+                    f"データ更新中... {i + 1}/{len(devices)} — {dev['name']}"
+                )
                 try:
                     raw = client.get_data(serial, dev["base_serial"], from_ts, to_ts)
                     count = len(raw.get("data", []))

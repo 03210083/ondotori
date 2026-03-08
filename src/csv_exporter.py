@@ -6,6 +6,8 @@ import os
 from collections import OrderedDict
 from datetime import datetime
 
+from src import get_app_dir
+
 logger = logging.getLogger(__name__)
 
 BOM = "\ufeff"
@@ -13,7 +15,7 @@ BOM = "\ufeff"
 
 def get_data_dir() -> str:
     """data/ フォルダのパスを返す。"""
-    return os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+    return os.path.join(get_app_dir(), "data")
 
 
 def generate_filename(merged_data: OrderedDict[datetime, dict]) -> str:

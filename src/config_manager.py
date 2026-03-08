@@ -4,6 +4,8 @@ import json
 import logging
 import os
 
+from src import get_app_dir
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG = {
@@ -21,7 +23,7 @@ REQUIRED_KEYS = ["api_key", "login_id", "login_pass", "base_serials", "start_dat
 
 def get_config_path() -> str:
     """config.json のパスを返す（ondotori/ 直下）。"""
-    return os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.json")
+    return os.path.join(get_app_dir(), "config.json")
 
 
 def load_config(path: str | None = None) -> dict:

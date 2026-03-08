@@ -19,6 +19,8 @@ from datetime import datetime, timedelta, timezone
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
+from src import get_app_dir
+
 from src.api_client import DEVICE_WAIT, OndotoriClient
 from src.config_manager import (
     create_default_config,
@@ -48,7 +50,7 @@ JST = timezone(timedelta(hours=9))
 
 def setup_logging():
     """ロガーを設定する。コンソール + ログファイル出力。"""
-    log_dir = os.path.join(PROJECT_ROOT, "logs")
+    log_dir = os.path.join(get_app_dir(), "logs")
     os.makedirs(log_dir, exist_ok=True)
 
     log_file = os.path.join(log_dir, datetime.now().strftime("%Y%m%d") + ".log")

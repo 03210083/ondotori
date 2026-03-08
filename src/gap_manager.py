@@ -7,6 +7,7 @@ import time
 from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 
+from src import get_app_dir
 from .api_client import DEVICE_WAIT, OndotoriAPIError, OndotoriClient
 from .data_processor import align_device_data
 
@@ -17,7 +18,7 @@ JST = timezone(timedelta(hours=9))
 
 def get_gaps_path() -> str:
     """gaps.json のパスを返す。"""
-    return os.path.join(os.path.dirname(os.path.dirname(__file__)), "gaps.json")
+    return os.path.join(get_app_dir(), "gaps.json")
 
 
 def load_gaps(path: str | None = None) -> list[dict]:
