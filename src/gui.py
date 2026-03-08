@@ -11,6 +11,8 @@ from PyQt6.QtCore import QObject, Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QApplication,
+    QCheckBox,
+    QFileDialog,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -26,8 +28,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src import get_app_dir
 from src.api_client import DEVICE_WAIT, OndotoriClient
 from src.config_manager import (
+    get_config_path,
     get_last_fetch,
     load_config,
     save_config,
@@ -78,7 +82,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("おんどとり データ取得ツール")
-        self.setMinimumSize(700, 600)
+        self.setMinimumSize(750, 650)
 
         self.config = load_config()
         self.worker_signal = WorkerSignal()
@@ -90,6 +94,9 @@ class MainWindow(QMainWindow):
         self._load_config_to_ui()
         self._connect_signals()
         self._update_status()
+
+        # 起動時にconfig.jsonのパスをログ表示（デバッグ用）
+        self._append_log(f"[起動] config: {get_config_path()}")
 
     def _setup_logging(self):
         self.qt_handler = QtLogHandler(self.log_signal)
@@ -132,6 +139,18 @@ class MainWindow(QMainWindow):
         row3.addWidget(self.start_date_edit)
         settings_layout.addLayout(row3)
 
+        # CSV保存先
+        row4 = QHBoxLayout()
+        row4.addWidget(QLabel("CSV保存先:"))
+        self.output_dir_edit = QLineEdit()
+        self.output_dir_edit.setPlaceholderText("(デフォルト: exeと同じフォルダのdata/)")
+        row4.addWidget(self.output_dir_edit)
+        browse_btn = QPushButton("参照...")
+        browse_btn.setFixedWidth(70)
+        browse_btn.clicked.connect(self._browse_output_dir)
+        row4.addWidget(browse_btn)
+        settings_layout.addLayout(row4)
+
         save_btn = QPushButton("設定を保存")
         save_btn.clicked.connect(self._save_config)
         settings_layout.addWidget(save_btn)
@@ -164,11 +183,15 @@ class MainWindow(QMainWindow):
 
         layout.addLayout(btn_row)
 
-        # --- 子機テーブル ---
-        self.device_table = QTableWidget(0, 4)
-        self.device_table.setHorizontalHeaderLabels(["名前", "シリアル", "モデル", "チャンネル"])
-        self.device_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.device_table.setMaximumHeight(180)
+        # --- 子機テーブル（有効チェックボックス付き） ---
+        self.device_table = QTableWidget(0, 5)
+        self.device_table.setHorizontalHeaderLabels(["有効", "名前", "シリアル", "モデル", "チャンネル"])
+        header = self.device_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(0, 40)
+        for col in range(1, 5):
+            header.setSectionResizeMode(col, QHeaderView.ResizeMode.Stretch)
+        self.device_table.setMaximumHeight(200)
         layout.addWidget(self.device_table)
 
         # --- ログ ---
@@ -195,9 +218,24 @@ class MainWindow(QMainWindow):
         base_serials = self.config.get("base_serials", [])
         self.base_serial_edit.setText(", ".join(base_serials))
         self.start_date_edit.setText(self.config.get("start_date", ""))
+        self.output_dir_edit.setText(self.config.get("output_dir", ""))
         self._refresh_device_table()
 
+    def _browse_output_dir(self):
+        current = self.output_dir_edit.text().strip()
+        if not current:
+            current = get_app_dir()
+        folder = QFileDialog.getExistingDirectory(self, "CSV保存先を選択", current)
+        if folder:
+            self.output_dir_edit.setText(folder)
+
     def _save_config(self):
+        self._sync_config_from_ui()
+        save_config(self.config)
+        self._append_log(f"[設定] config.json を保存しました。({get_config_path()})")
+
+    def _sync_config_from_ui(self):
+        """GUIの入力値を self.config に反映する。"""
         self.config["api_key"] = self.api_key_edit.text().strip()
         self.config["login_id"] = self.login_id_edit.text().strip()
         self.config["login_pass"] = self.login_pass_edit.text().strip()
@@ -205,21 +243,44 @@ class MainWindow(QMainWindow):
             s.strip() for s in self.base_serial_edit.text().split(",") if s.strip()
         ]
         self.config["start_date"] = self.start_date_edit.text().strip()
-        save_config(self.config)
-        self._append_log("[設定] config.json を保存しました。")
+        self.config["output_dir"] = self.output_dir_edit.text().strip()
+        # 子機の有効/無効状態を保存
+        self._sync_device_enabled()
+
+    def _sync_device_enabled(self):
+        """テーブルのチェック状態を config の devices に反映する。"""
+        devices = self.config.get("devices", [])
+        for i, dev in enumerate(devices):
+            if i < self.device_table.rowCount():
+                widget = self.device_table.cellWidget(i, 0)
+                if widget:
+                    cb = widget.findChild(QCheckBox)
+                    if cb:
+                        dev["enabled"] = cb.isChecked()
 
     def _refresh_device_table(self):
         devices = self.config.get("devices", [])
         self.device_table.setRowCount(len(devices))
         for i, dev in enumerate(devices):
-            self.device_table.setItem(i, 0, QTableWidgetItem(dev.get("name", "")))
-            self.device_table.setItem(i, 1, QTableWidgetItem(dev.get("serial", "")))
-            self.device_table.setItem(i, 2, QTableWidgetItem(dev.get("model", "")))
+            # チェックボックス（有効/無効）
+            cb = QCheckBox()
+            cb.setChecked(dev.get("enabled", True))
+            cb_widget = QWidget()
+            cb_layout = QHBoxLayout(cb_widget)
+            cb_layout.addWidget(cb)
+            cb_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            cb_layout.setContentsMargins(0, 0, 0, 0)
+            self.device_table.setCellWidget(i, 0, cb_widget)
+
+            self.device_table.setItem(i, 1, QTableWidgetItem(dev.get("name", "")))
+            self.device_table.setItem(i, 2, QTableWidgetItem(dev.get("serial", "")))
+            self.device_table.setItem(i, 3, QTableWidgetItem(dev.get("model", "")))
             ch_str = ", ".join(ch["col_name"] for ch in dev.get("channels", []))
-            self.device_table.setItem(i, 3, QTableWidgetItem(ch_str))
+            self.device_table.setItem(i, 4, QTableWidgetItem(ch_str))
 
     def _update_status(self):
         devices = self.config.get("devices", [])
+        enabled_count = sum(1 for d in devices if d.get("enabled", True))
         last_fetches = self.config.get("last_fetch", {})
         if last_fetches:
             latest = max(last_fetches.values())
@@ -227,7 +288,7 @@ class MainWindow(QMainWindow):
         else:
             last_str = "未取得"
         self.status_label.setText(
-            f"子機数: {len(devices)}台 | 最終更新: {last_str} | 開始日: {self.config.get('start_date', '-')}"
+            f"子機数: {enabled_count}/{len(devices)}台 | 最終更新: {last_str} | 開始日: {self.config.get('start_date', '-')}"
         )
 
     def _set_buttons_enabled(self, enabled: bool):
@@ -238,6 +299,7 @@ class MainWindow(QMainWindow):
     def _run_in_thread(self, target):
         if self._running:
             return
+        self._sync_config_from_ui()
         self._running = True
         self._set_buttons_enabled(False)
         thread = Thread(target=target, daemon=True)
@@ -250,6 +312,10 @@ class MainWindow(QMainWindow):
             self.config["login_pass"],
         )
 
+    def _get_enabled_devices(self) -> list[dict]:
+        """有効な子機のみ返す。"""
+        return [d for d in self.config.get("devices", []) if d.get("enabled", True)]
+
     # --- ワーカー: 子機一覧 ---
     def _on_devices(self):
         self._run_in_thread(self._worker_devices)
@@ -260,6 +326,10 @@ class MainWindow(QMainWindow):
             client = self._make_client()
             logger.info("子機一覧を取得中...")
             devices = client.get_devices(self.config["base_serials"])
+            # 既存のenabled状態を引き継ぐ
+            old_enabled = {d["serial"]: d.get("enabled", True) for d in self.config.get("devices", [])}
+            for dev in devices:
+                dev["enabled"] = old_enabled.get(dev["serial"], True)
             self.config = update_devices(self.config, devices)
             save_config(self.config)
             self.worker_signal.devices_updated.emit()
@@ -275,9 +345,9 @@ class MainWindow(QMainWindow):
         logger = logging.getLogger("gui")
         try:
             client = self._make_client()
-            devices = self.config.get("devices", [])
+            devices = self._get_enabled_devices()
             if not devices:
-                self.worker_signal.finished.emit("エラー: デバイス情報がありません。先に子機一覧を取得してください。")
+                self.worker_signal.finished.emit("エラー: 有効なデバイスがありません。")
                 return
 
             to_dt = datetime.now(tz=JST)
@@ -322,7 +392,7 @@ class MainWindow(QMainWindow):
                 self.worker_signal.finished.emit("取得データが空です。")
                 return
 
-            # 欠損管理
+            # 欠損管理（有効な子機のみ）
             gaps = load_gaps()
             new_gaps = detect_gaps(self.merged, devices)
             gaps = merge_gaps(gaps, new_gaps)
@@ -336,8 +406,9 @@ class MainWindow(QMainWindow):
             save_gaps(gaps)
             save_config(self.config)
 
-            # CSV自動出力
-            filepath = export_csv(self.merged, column_order)
+            # CSV出力
+            output_dir = self.config.get("output_dir", "").strip() or None
+            filepath = export_csv(self.merged, column_order, output_dir=output_dir)
             self.worker_signal.finished.emit(f"データ更新完了。CSV: {filepath}")
 
         except Exception as e:
@@ -348,7 +419,8 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "merged") or not self.merged:
             self._append_log("出力するデータがありません。先にデータ更新を実行してください。")
             return
-        filepath = export_csv(self.merged, self.column_order)
+        output_dir = self.config.get("output_dir", "").strip() or None
+        filepath = export_csv(self.merged, self.column_order, output_dir=output_dir)
         self._append_log(f"CSV出力: {filepath}")
 
     # --- シグナルハンドラ ---
