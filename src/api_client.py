@@ -16,7 +16,7 @@ RATE_LIMIT_THRESHOLD = 1
 RATE_LIMIT_WAIT = 10  # 秒
 
 # 子機間のウェイト（秒）
-DEVICE_WAIT = 3
+DEVICE_WAIT = 1
 
 
 class OndotoriAPIError(Exception):
