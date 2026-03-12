@@ -5,11 +5,14 @@ import time
 
 import requests
 
+from src.sorting import sort_key_japanese
+
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.webstorage.jp"
 DEVICES_ENDPOINT = "/v1/devices/current"
-DATA_ENDPOINT = "/v1/devices/data-rtr500"
+DATA_ENDPOINT_RTR500 = "/v1/devices/data-rtr500"
+DATA_ENDPOINT_GENERAL = "/v1/devices/data"
 
 # レートリミットしきい値: 残数がこの値以下になったら待機
 RATE_LIMIT_THRESHOLD = 2
@@ -17,6 +20,15 @@ RATE_LIMIT_WAIT = 10  # 秒
 
 # 子機間のウェイト（秒）
 DEVICE_WAIT = 3
+
+
+def _is_rtr500_model(model: str) -> bool:
+    """RTR500系モデルかどうかを判定する。
+
+    RTR500系は親機経由のデータ取得（data-rtr500エンドポイント）が必要。
+    それ以外（TR-7系、TR4A、TR32B等）は汎用エンドポイントを使用。
+    """
+    return model.upper().startswith("RTR")
 
 
 class OndotoriAPIError(Exception):
@@ -83,13 +95,14 @@ class OndotoriClient:
             logger.error("API通信エラー（リトライ後も失敗）: %s", e)
             raise OndotoriAPIError(f"API通信に失敗しました: {e}") from e
 
-    def get_devices(self, base_serials: list[str]) -> list[dict]:
+    def get_devices(self, base_serials: list[str] | None = None) -> list[dict]:
         """子機一覧を取得する。
 
-        base_serials で指定した親機に紐づく子機のみ返す。
+        base_serials が指定されていれば該当する親機の子機のみ返す。
+        未指定・空リストの場合は全子機を返す。
 
         Returns:
-            子機情報のリスト。各要素は config.json の devices 形式に変換済み。
+            子機情報のリスト（名前の五十音順でソート済み）。
         """
         body = self._auth_body()
         result = self._request(DEVICES_ENDPOINT, body)
@@ -127,6 +140,9 @@ class OndotoriClient:
                 "name": dev.get("name", dev["serial"]),
                 "channels": channels,
             })
+
+        # 名前の五十音順（自然順）でソート
+        devices.sort(key=lambda d: sort_key_japanese(d["name"]))
         return devices
 
     def get_data(
@@ -135,6 +151,7 @@ class OndotoriClient:
         base_serial: str,
         from_ts: int,
         to_ts: int,
+        model: str = "",
     ) -> dict:
         """子機の期間指定データを取得する。
 
@@ -143,13 +160,18 @@ class OndotoriClient:
             base_serial: 親機シリアル番号
             from_ts: 取得開始 unixtime
             to_ts: 取得終了 unixtime
+            model: 子機モデル名（エンドポイント判定用）
 
         Returns:
             APIレスポンス（data配列を含む dict）
         """
+        is_rtr500 = _is_rtr500_model(model)
+        endpoint = DATA_ENDPOINT_RTR500 if is_rtr500 else DATA_ENDPOINT_GENERAL
+
         body = self._auth_body()
         body["remote-serial"] = remote_serial
-        body["base-serial"] = base_serial
+        if is_rtr500:
+            body["base-serial"] = base_serial
         body["unixtime-from"] = str(from_ts)
         body["unixtime-to"] = str(to_ts)
-        return self._request(DATA_ENDPOINT, body)
+        return self._request(endpoint, body)

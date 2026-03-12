@@ -30,6 +30,7 @@ from PyQt6.QtWidgets import (
 
 from src import get_app_dir
 from src.api_client import DEVICE_WAIT, OndotoriClient
+from src.sorting import sort_key_japanese
 from src.config_manager import (
     get_config_path,
     get_last_fetch,
@@ -132,7 +133,7 @@ class MainWindow(QMainWindow):
         row3 = QHBoxLayout()
         row3.addWidget(QLabel("親機S/N:"))
         self.base_serial_edit = QLineEdit()
-        self.base_serial_edit.setPlaceholderText("複数台はカンマ区切り (例: 58580041, 58580E2A)")
+        self.base_serial_edit.setPlaceholderText("カンマ区切り (例: 58580041, 58580E2A) 空欄で全子機取得")
         row3.addWidget(self.base_serial_edit)
         row3.addWidget(QLabel("開始日:"))
         self.start_date_edit = QLineEdit()
@@ -261,6 +262,9 @@ class MainWindow(QMainWindow):
 
     def _refresh_device_table(self):
         devices = self.config.get("devices", [])
+        # 名前の五十音順でソート（config内の順序も更新）
+        devices.sort(key=lambda d: sort_key_japanese(d.get("name", "")))
+        self.config["devices"] = devices
         self.device_table.setRowCount(len(devices))
         for i, dev in enumerate(devices):
             # チェックボックス（有効/無効）
@@ -372,7 +376,7 @@ class MainWindow(QMainWindow):
                     f"データ更新中... {i + 1}/{len(devices)} — {dev['name']}"
                 )
                 try:
-                    raw = client.get_data(serial, dev["base_serial"], from_ts, to_ts)
+                    raw = client.get_data(serial, dev["base_serial"], from_ts, to_ts, model=dev.get("model", ""))
                     count = len(raw.get("data", []))
                     logger.info("  %d件取得", count)
                     aligned = align_device_data(raw, dev["channels"])

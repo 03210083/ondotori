@@ -145,7 +145,7 @@ def retry_gaps(
         to_ts = int(to_dt.timestamp())
 
         try:
-            raw = client.get_data(serial, dev["base_serial"], from_ts, to_ts)
+            raw = client.get_data(serial, dev["base_serial"], from_ts, to_ts, model=dev.get("model", ""))
             aligned = align_device_data(raw, dev["channels"])
 
             for g in serial_gaps:

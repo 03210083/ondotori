@@ -112,7 +112,7 @@ def cmd_devices(args):
     client = OndotoriClient(config["api_key"], config["login_id"], config["login_pass"])
 
     logger.info("子機一覧を取得中...")
-    devices = client.get_devices(config["base_serials"])
+    devices = client.get_devices(config.get("base_serials", []))
 
     print(f"\n=== 子機一覧 ({len(devices)}台) ===\n")
     for i, dev in enumerate(devices, 1):
@@ -161,7 +161,7 @@ def cmd_fetch(args):
             from_dt.strftime("%Y/%m/%d %H:%M"),
         )
         try:
-            raw = client.get_data(serial, dev["base_serial"], from_ts, to_ts)
+            raw = client.get_data(serial, dev["base_serial"], from_ts, to_ts, model=dev.get("model", ""))
             record_count = len(raw.get("data", []))
             logger.info("  %d件取得", record_count)
             aligned = align_device_data(raw, dev["channels"])
